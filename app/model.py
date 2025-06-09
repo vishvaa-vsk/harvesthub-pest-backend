@@ -2,6 +2,7 @@
 import os
 import tensorflow as tf
 import numpy as np
+from datetime import datetime
 from PIL import Image
 
 class PestDetectionModel:
@@ -91,13 +92,13 @@ class PestDetectionModel:
             # Get the label
             if predicted_index < len(self.labels):
                 predicted_label = self.labels[predicted_index]
-            else:
-                predicted_label = f"unknown_class_{predicted_index}"
+            else:            predicted_label = f"unknown_class_{predicted_index}"
             
             return {
                 "label": predicted_label,
                 "confidence": confidence,
-                "index": int(predicted_index)
+                "index": int(predicted_index),
+                "timestamp": datetime.now().isoformat()
             }
             
         except Exception as e:
