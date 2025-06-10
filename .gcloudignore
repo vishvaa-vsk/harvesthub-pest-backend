@@ -1,0 +1,33 @@
+# .gcloudignore for HarvestHub FastAPI Cloud Run deployment
+# Explicitly include model files
+
+.gcloudignore
+.git
+.gitignore
+
+# Exclude development files
+*.md
+docs/
+test_*.py
+*_test.py
+tests/
+performance_test.py
+check_model_deployment.py
+
+# Exclude deployment scripts
+deploy_cloudrun.py
+deploy_cloudrun_enhanced.ps1
+quick_deploy.ps1
+
+# EXPLICITLY INCLUDE MODEL FILES (override any default exclusions)
+!app/data/model.h5
+!app/data/labels.txt
+!app/data/
+
+# Exclude environment files
+.env.template
+.env.development
+
+# Exclude logs
+*.log
+logs/

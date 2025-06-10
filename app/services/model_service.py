@@ -34,11 +34,36 @@ class ModelService:
         self._load_labels()
     
     def _load_model(self):
-        """Load TensorFlow model"""
+        """Load TensorFlow model with optimized settings for consistent predictions"""
         try:
             if os.path.exists(settings.MODEL_PATH):
-                self._model = tf.keras.models.load_model(settings.MODEL_PATH)
+                # Set random seeds for deterministic behavior
+                tf.random.set_seed(42)
+                np.random.seed(42)
+                
+                # Configure TensorFlow for deterministic behavior
+                tf.config.threading.set_intra_op_parallelism_threads(1)
+                tf.config.threading.set_inter_op_parallelism_threads(1)
+                
+                # Enable deterministic ops
+                tf.config.experimental.enable_op_determinism()
+                
+                # Load model with explicit configurations
+                self._model = tf.keras.models.load_model(
+                    settings.MODEL_PATH,
+                    compile=False  # Don't compile to avoid optimizer state issues
+                )
+                
+                # Recompile with consistent settings
+                self._model.compile(
+                    optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+                    loss='categorical_crossentropy',
+                    metrics=['accuracy']
+                )
+                
                 print(f"✅ Model loaded from {settings.MODEL_PATH}")
+                print(f"   Input shape: {self._model.input_shape}")
+                print(f"   Output shape: {self._model.output_shape}")
             else:
                 print(f"⚠️  Model file not found at {settings.MODEL_PATH}, creating dummy model")
                 self._model = self._create_dummy_model()
@@ -83,20 +108,37 @@ class ModelService:
         return self._labels
     
     def _preprocess_image(self, image_file: IO[bytes]) -> Optional[np.ndarray]:
-        """Preprocess image for model prediction"""
+        """Preprocess image for model prediction with consistent normalization"""
         try:
+            # Reset file pointer to beginning
+            image_file.seek(0)
+            
+            # Open and process image
             image = Image.open(image_file)
             image = image.convert('RGB')
-            image = image.resize(settings.IMAGE_SIZE)
-            image_array = np.array(image) / 255.0
+            
+            # Resize with high-quality resampling for consistency
+            image = image.resize(settings.IMAGE_SIZE, Image.Resampling.LANCZOS)
+            
+            # Convert to numpy array with consistent dtype
+            image_array = np.array(image, dtype=np.float32)
+            
+            # Normalize to [0,1] range consistently
+            image_array = image_array / 255.0
+            
+            # Add batch dimension
             image_array = np.expand_dims(image_array, axis=0)
+            
+            # Ensure consistent shape
+            assert image_array.shape == (1, 224, 224, 3), f"Unexpected shape: {image_array.shape}"
+            
             return image_array
         except Exception as e:
             print(f"Error preprocessing image: {e}")
             return None
     
     def predict(self, image_file: IO[bytes]) -> Optional[Dict[str, Any]]:
-        """Make prediction on image"""
+        """Make prediction on image with consistent confidence calculation"""
         if not self.is_model_loaded():
             return None
         
@@ -105,11 +147,26 @@ class ModelService:
             if processed_image is None:
                 return None
             
-            predictions = self._model.predict(processed_image)
+            # Make prediction with consistent settings
+            with tf.device('/CPU:0'):  # Force CPU for consistency
+                predictions = self._model.predict(
+                    processed_image, 
+                    batch_size=1,
+                    verbose=0
+                )
+            
+            # Get prediction results
             predicted_index = int(np.argmax(predictions[0]))
             confidence = float(predictions[0][predicted_index])
             
+            # Ensure confidence is within valid range
+            confidence = max(0.0, min(1.0, confidence))
+            
+            # Get label
             label = self._labels[predicted_index] if predicted_index < len(self._labels) else f"class_{predicted_index}"
+            
+            # Log prediction for debugging
+            print(f"Prediction - Label: {label}, Confidence: {confidence:.4f}, Index: {predicted_index}")
             
             return {
                 'label': label,

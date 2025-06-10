@@ -1,0 +1,60 @@
+# Optimized Dockerfile for Google Cloud Run
+# Ensures consistent TensorFlow behavior and model predictions
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Set environment variables for consistent ML behavior
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONHASHSEED=0
+ENV TF_CPP_MIN_LOG_LEVEL=2
+ENV TF_ENABLE_ONEDNN_OPTS=0
+ENV OMP_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV VECLIB_MAXIMUM_THREADS=1
+ENV NUMEXPR_NUM_THREADS=1
+ENV TF_DETERMINISTIC_OPS=1
+ENV TF_CUDNN_DETERMINISTIC=1
+ENV TF_FORCE_GPU_ALLOW_GROWTH=true
+ENV TF_GPU_THREAD_MODE=gpu_private
+ENV ENVIRONMENT=production
+
+# Install system dependencies required for TensorFlow and image processing
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first to leverage Docker cache
+COPY requirements.txt .
+
+# Install Python dependencies with specific versions for consistency
+RUN pip install --no-cache-dir --upgrade pip==24.2 && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir gunicorn==21.2.0
+
+# Copy application code
+COPY . .
+
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash appuser && \
+    chown -R appuser:appuser /app
+USER appuser
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run the application with optimized settings for Cloud Run
+CMD ["uvicorn", "main_cloudrun:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--loop", "uvloop", "--http", "httptools", "--log-level", "info", "--no-access-log"]

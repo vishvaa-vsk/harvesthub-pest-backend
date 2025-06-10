@@ -1,0 +1,76 @@
+# .dockerignore for optimized Cloud Run builds
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation and development files
+README.md
+MIGRATION_COMPLETE.md
+*.md
+docs/
+
+# Test files
+test_*.py
+*_test.py
+tests/
+test_images/
+
+# Development configuration
+.env.template
+.env.development
+firebase-key.json.template
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Cloud deployment files
+cloudbuild.yaml
+deploy_cloudrun.py
+service.yaml
+
+# Performance test files
+performance_test.py
