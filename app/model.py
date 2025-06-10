@@ -1,8 +1,10 @@
-# filepath: e:\Projects\harvesthub-pest-backend\app\model.py
 import os
 import tensorflow as tf
 import numpy as np
 from datetime import datetime
+import tensorflow as tf
+import numpy as np
+import os
 from PIL import Image
 
 class PestDetectionModel:

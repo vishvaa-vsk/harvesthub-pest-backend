@@ -1,8 +1,10 @@
 import os
 import json
-import pandas as pd
+import asyncio
+import aiohttp
 from datetime import datetime
 from dotenv import load_dotenv
+from typing import Optional, Dict, Any
 
 # Load environment variables
 load_dotenv()
@@ -59,9 +61,9 @@ LANGUAGE_NAMES = {
     'as': 'Assamese (অসমীয়া)'
 }
 
-def get_pest_recommendation(label, lang='en'):
+async def get_pest_recommendation_async(label: str, lang: str = 'en') -> Dict[str, Any]:
     """
-    Get localized pest recommendation using Firebase cache or Gemini API
+    Get localized pest recommendation using Firebase cache or Gemini API (Async)
     
     Args:
         label (str): Predicted pest/disease label
@@ -75,7 +77,7 @@ def get_pest_recommendation(label, lang='en'):
         cache_key = f"{label}::{lang}"
         
         # Try to get from Firebase cache first
-        cached_result = get_from_firestore_cache(cache_key)
+        cached_result = await get_from_firestore_cache_async(cache_key)
         if cached_result:
             return {
                 "source": "firebase",
@@ -84,25 +86,98 @@ def get_pest_recommendation(label, lang='en'):
         
         # If not in cache, generate using Gemini API
         if model:
-            gemini_result = generate_gemini_recommendation(label, lang)
+            gemini_result = await generate_gemini_recommendation_async(label, lang)
             if gemini_result:
-                # Cache the result in Firestore
-                cache_to_firestore(cache_key, gemini_result)
+                # Cache the result in Firestore (non-blocking)
+                asyncio.create_task(cache_to_firestore_async(cache_key, gemini_result))
                 return {
                     "source": "gemini",
                     "data": gemini_result
                 }
         
         # Fallback to default response
-        return get_fallback_recommendation(label, lang)
+        fallback = get_fallback_recommendation(label, lang)
+        return {
+            "source": "fallback", 
+            "data": fallback
+        }
         
     except Exception as e:
         print(f"Error getting pest recommendation: {e}")
-        return get_fallback_recommendation(label, lang)
+        fallback = get_fallback_recommendation(label, lang)
+        return {
+            "source": "fallback",
+            "data": fallback
+        }
 
-def generate_gemini_recommendation(label, lang):
+async def get_from_firestore_cache_async(cache_key: str) -> Optional[Dict[str, Any]]:
     """
-    Generate pest recommendation using Gemini API
+    Retrieve recommendation from Firestore cache (Async)
+    
+    Args:
+        cache_key (str): Cache key in format "label::lang"
+    
+    Returns:
+        dict or None: Cached recommendation data
+    """
+    try:
+        if not db:
+            return None
+        
+        # Run Firestore operation in executor to avoid blocking
+        loop = asyncio.get_event_loop()
+        doc_ref = db.collection('remedies').document(cache_key)
+        doc = await loop.run_in_executor(None, doc_ref.get)
+        
+        if doc.exists:
+            data = doc.to_dict()
+            print(f"Retrieved from Firestore cache: {cache_key}")
+            return {
+                'diagnosis': data.get('diagnosis', ''),
+                'causal_agent': data.get('causal_agent', ''),
+                'treatments': data.get('treatments', [])
+            }
+        
+        return None
+        
+    except Exception as e:
+        print(f"Error retrieving from Firestore cache: {e}")
+        return None
+
+async def cache_to_firestore_async(cache_key: str, recommendation_data: Dict[str, Any]) -> None:
+    """
+    Cache recommendation to Firestore (Async)
+    
+    Args:
+        cache_key (str): Cache key in format "label::lang"
+        recommendation_data (dict): Recommendation data to cache
+    """
+    try:
+        if not db:
+            return
+        
+        # Prepare cache data
+        cache_data = {
+            'diagnosis': recommendation_data.get('diagnosis', ''),
+            'causal_agent': recommendation_data.get('causal_agent', ''),
+            'treatments': recommendation_data.get('treatments', []),
+            'cached_at': firestore.SERVER_TIMESTAMP,
+            'source': 'gemini'
+        }
+        
+        # Run Firestore operation in executor to avoid blocking
+        loop = asyncio.get_event_loop()
+        doc_ref = db.collection('remedies').document(cache_key)
+        await loop.run_in_executor(None, doc_ref.set, cache_data)
+        
+        print(f"Cached to Firestore: {cache_key}")
+        
+    except Exception as e:
+        print(f"Error caching to Firestore: {e}")
+
+async def generate_gemini_recommendation_async(label: str, lang: str) -> Optional[Dict[str, Any]]:
+    """
+    Generate pest recommendation using Gemini API (Async)
     
     Args:
         label (str): Pest/disease label
@@ -150,8 +225,14 @@ Important notes:
 - Ensure all text is in {language_name} language
 """
 
-        # Generate response
-        response = model.generate_content(prompt)
+        # Generate response using asyncio executor
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None, 
+            model.generate_content, 
+            prompt
+        )
+        
         response_text = response.text.strip()
         
         # Clean up the response text to extract JSON
@@ -179,68 +260,7 @@ Important notes:
         print(f"Error generating Gemini recommendation: {e}")
         return None
 
-def get_from_firestore_cache(cache_key):
-    """
-    Retrieve recommendation from Firestore cache
-    
-    Args:
-        cache_key (str): Cache key in format "label::lang"
-    
-    Returns:
-        dict or None: Cached recommendation data
-    """
-    try:
-        if not db:
-            return None
-            
-        doc_ref = db.collection('remedies').document(cache_key)
-        doc = doc_ref.get()
-        
-        if doc.exists:
-            data = doc.to_dict()
-            print(f"Retrieved from Firestore cache: {cache_key}")
-            return {
-                'diagnosis': data.get('diagnosis', ''),
-                'causal_agent': data.get('causal_agent', ''),
-                'treatments': data.get('treatments', [])
-            }
-        
-        return None
-        
-    except Exception as e:
-        print(f"Error retrieving from Firestore cache: {e}")
-        return None
-
-def cache_to_firestore(cache_key, recommendation_data):
-    """
-    Cache recommendation to Firestore
-    
-    Args:
-        cache_key (str): Cache key in format "label::lang"
-        recommendation_data (dict): Recommendation data to cache
-    """
-    try:
-        if not db:
-            return
-            
-        doc_ref = db.collection('remedies').document(cache_key)
-        
-        # Add metadata
-        cache_data = {
-            'diagnosis': recommendation_data.get('diagnosis', ''),
-            'causal_agent': recommendation_data.get('causal_agent', ''),
-            'treatments': recommendation_data.get('treatments', []),
-            'cached_at': firestore.SERVER_TIMESTAMP,
-            'source': 'gemini'
-        }
-        
-        doc_ref.set(cache_data)
-        print(f"Cached to Firestore: {cache_key}")
-        
-    except Exception as e:
-        print(f"Error caching to Firestore: {e}")
-
-def get_fallback_recommendation(label, lang):
+def get_fallback_recommendation(label: str, lang: str) -> Dict[str, Any]:
     """
     Generate fallback recommendation when Gemini API fails
     
@@ -249,7 +269,7 @@ def get_fallback_recommendation(label, lang):
         lang (str): Language code
     
     Returns:
-        dict: Fallback recommendation
+        dict: Fallback recommendation data (not wrapped in source)
     """
     language_name = LANGUAGE_NAMES.get(lang, 'English')
     
@@ -288,9 +308,4 @@ def get_fallback_recommendation(label, lang):
     }
     
     # Get appropriate fallback response
-    fallback = fallback_responses.get(lang, fallback_responses['en'])
-    
-    return {
-        "source": "fallback",
-        "data": fallback
-    }
+    return fallback_responses.get(lang, fallback_responses['en'])
