@@ -512,15 +512,6 @@ The API includes comprehensive error handling for all scenarios:
 
 ## 🧪 Testing
 
-### Automated Test Suite
-```bash
-# Run comprehensive FastAPI tests
-python test_fastapi.py
-
-# Run performance tests
-python performance_test.py
-```
-
 **Test Coverage:**
 - ✅ Health endpoints functionality
 - ✅ Language validation and support
@@ -588,30 +579,7 @@ cat .env | grep GEMINI_API_KEY
 # Check supported formats: PNG, JPG, JPEG, GIF, BMP
 # Ensure image size is reasonable (< 10MB recommended)
 ```
-
-## 🚀 Production Deployment
-
-### Pre-Deployment Checklist
-- [ ] Environment variables configured (`.env` file)
-- [ ] Firebase service account key added
-- [ ] Model file (`app/data/model.h5`) present and valid
-- [ ] Labels file (`app/data/labels.txt`) matches model classes
-- [ ] Dependencies installed (`pip install -r requirements.txt`)
-- [ ] Health endpoint returns "healthy" status
-
-### Recommended Production Setup
-```bash
-# Use production ASGI server (FastAPI recommended)
-pip install uvicorn[standard]
-
-# Run with multiple workers and proper configuration
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
-
-# Or use gunicorn with uvicorn workers for better performance
-pip install gunicorn uvicorn[standard]
-gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 120
-```
-
+## 🌐 Deployment
 ### Cloud Deployment Options
 
 **Google Cloud Platform:**
